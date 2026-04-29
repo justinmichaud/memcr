@@ -596,10 +596,13 @@ try_again:
 	return 0;
 }
 
+static int unseize_target(void);
+
 static int seize_target(pid_t pid)
 {
-	int ret;
+	int ret, i;
 	char path[PATH_MAX];
+	int main_tid_seized = 0;
 
 	snprintf(path, sizeof(path), "/proc/%d", pid);
 
@@ -616,6 +619,18 @@ static int seize_target(pid_t pid)
 		return ret;
 
 	log("%d %s\n", nr_threads, nr_threads == 1 ? "thread" : "threads");
+
+	for (i = 0; i < nr_threads; i++) {
+		if (tids[i] == pid) {
+			main_tid_seized = 1;
+			break;
+		}
+	}
+	if (!main_tid_seized) {
+		err("%d: main thread tid not present in /proc/%d/task/ (likely the original main thread exited via pthread_exit while the process kept running). memcr requires the main thread to be alive; pass any live thread tid as -p instead.\n", pid, pid);
+		unseize_target();
+		return 1;
+	}
 
 	return 0;
 }
@@ -2253,6 +2268,7 @@ static int signals_unblock(pid_t pid)
 static int ctx_save(pid_t pid)
 {
 	int max_blob_size;
+	int ret;
 	struct registers regs;
 
 	ctx.pid = pid;
@@ -2272,7 +2288,17 @@ static int ctx_save(pid_t pid)
 	 * space. Determine the position and save the original code.
 	 */
 	ctx.pc = (void *)round_down((unsigned long)get_cpu_regs_pc(&regs), page_size);
-	peek(ctx.pid, ctx.pc, ctx.code, ctx.code_size);
+	if (!ctx.pc) {
+		err("ctx_save: pid %d has PC=0; aborting\n", pid);
+		free(ctx.code);
+		return -EFAULT;
+	}
+	ret = peek(ctx.pid, ctx.pc, ctx.code, ctx.code_size);
+	if (ret) {
+		err("ctx_save: peek code at %p failed for pid %d\n", ctx.pc, pid);
+		free(ctx.code);
+		return -ret;
+	}
 
 	/*
 	 * Save and restore some bytes below %sp so that blobs can use it
@@ -2280,7 +2306,12 @@ static int ctx_save(pid_t pid)
 	 * is done earlier.
 	 */
 	ctx.sp = get_cpu_regs_sp(&regs) - sizeof(ctx.stack);
-	peek(ctx.pid, ctx.sp, ctx.stack, sizeof(ctx.stack));
+	ret = peek(ctx.pid, ctx.sp, ctx.stack, sizeof(ctx.stack));
+	if (ret) {
+		err("ctx_save: peek stack at %p failed for pid %d\n", ctx.sp, pid);
+		free(ctx.code);
+		return -ret;
+	}
 
 	return 0;
 }
@@ -2301,7 +2332,8 @@ static int execute_parasite_checkpoint(pid_t pid)
 {
 	unsigned long ret;
 
-	ctx_save(pid);
+	if (ctx_save(pid) < 0)
+		return -1;
 
 	signals_block(pid);
 
