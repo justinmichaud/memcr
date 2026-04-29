@@ -30,6 +30,7 @@ int sys_socket(int family, int type, int protocol);
 int sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen);
 int sys_bind(int fd, struct sockaddr *addr, socklen_t len);
 int sys_listen(int fd, int n);
+int sys_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
 int sys_exit(int error_code);
 long sys_gettid(void);
 int sys_fchmod(int fd, mode_t mode);

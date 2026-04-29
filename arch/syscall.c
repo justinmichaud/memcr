@@ -81,6 +81,11 @@ int sys_listen(int fd, int n)
 	return syscall2(__NR_listen, fd, n);
 }
 
+int sys_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen)
+{
+	return syscall5(__NR_setsockopt, fd, level, optname, (unsigned long)optval, optlen);
+}
+
 int sys_exit(int error_code)
 {
 	return syscall1(__NR_exit, error_code);

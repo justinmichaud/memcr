@@ -253,6 +253,13 @@ void __attribute__((__used__)) service(struct parasite_args *args)
 	if (srvd < 0)
 		die("sys_socket() failed: ", srvd);
 
+	{
+		int one = 1;
+		ret = sys_setsockopt(srvd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+		if (ret < 0)
+			die("sys_setsockopt(SO_REUSEADDR) failed: ", ret);
+	}
+
 	ret = sys_bind(srvd, (struct sockaddr *)&args->addr, sizeof(args->addr));
 	if (ret < 0)
 		die("sys_bind() failed: ", ret);
