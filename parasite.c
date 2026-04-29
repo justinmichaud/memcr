@@ -17,8 +17,9 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include <stddef.h>
 #include <sys/socket.h>
-#include <sys/un.h>
+#include <netinet/in.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <linux/fcntl.h> /* for O_RDONLY */
@@ -34,6 +35,10 @@
 
 static int finish;
 static int fpage;
+
+#ifdef PARASITE_DEBUG
+volatile int parasite_wait_for_dbg = 1;
+#endif
 
 #define PAGEMAP_BUF_SIZE (4096/sizeof(uint64_t))
 static uint64_t pagemap_buf[PAGEMAP_BUF_SIZE];
@@ -242,40 +247,26 @@ void __attribute__((__used__)) service(struct parasite_args *args)
 	int ret;
 	int srvd;
 
-	srvd = sys_socket(AF_UNIX, SOCK_STREAM, 0);
+	print(2, "parasite: service() entered\n");
+
+	srvd = sys_socket(AF_INET, SOCK_STREAM, 0);
 	if (srvd < 0)
 		die("sys_socket() failed: ", srvd);
-
-	if ((args->addr.sun_path[0] != '\0') && (args->gid > 0)) {
-		ret = sys_fchmod(srvd, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-		if (ret < 0)
-			die("sys_fchmod() failed: ", ret);
-	}
 
 	ret = sys_bind(srvd, (struct sockaddr *)&args->addr, sizeof(args->addr));
 	if (ret < 0)
 		die("sys_bind() failed: ", ret);
 
-	if (args->addr.sun_path[0] != '\0') {
-		if (args->gid > 0) {
-			ret = sys_chown(args->addr.sun_path, -1, args->gid);
-			if (ret < 0)
-				die("sys_chown() failed: ", ret);
-
-			ret = sys_chmod(args->addr.sun_path, 0660);
-			if (ret < 0)
-				die("sys_chmod() failed: ", ret);
-		}
-		else {
-			ret = sys_chmod(args->addr.sun_path, 0600);
-			if (ret < 0)
-				die("sys_chmod() failed: ", ret);
-		}
-	}
-
 	ret = sys_listen(srvd, 1);
 	if (ret < 0)
 		die("sys_listen() failed: ", ret);
+
+#ifdef PARASITE_DEBUG
+	print(2, "parasite: PARASITE_DEBUG: spinning until parasite_wait_for_dbg=0\n");
+	while (parasite_wait_for_dbg)
+		;
+	print(2, "parasite: PARASITE_DEBUG: done spinning until parasite_wait_for_dbg=0\n");
+#endif
 
 	if (args->flags & PARASITE_FLAG_USE_PAGEMAP) {
 		fpage = sys_open("/proc/self/pagemap", O_RDONLY);

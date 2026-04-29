@@ -453,18 +453,16 @@ static int parasite_status_ok(void)
 	return ret;
 }
 
-static void parasite_socket_init(struct sockaddr_un *addr, pid_t pid)
+#define PARASITE_PORT_BASE 40000
+#define PARASITE_PORT_RANGE 10000
+
+static void parasite_socket_init(struct sockaddr_in *addr, pid_t pid)
 {
-	memset(addr, 0x00, sizeof(struct sockaddr_un));
+	memset(addr, 0x00, sizeof(struct sockaddr_in));
 
-	addr->sun_family = AF_UNIX;
-
-	if (parasite_socket_dir)
-		snprintf(addr->sun_path, sizeof(addr->sun_path), "%s/memcr%u", parasite_socket_dir, pid);
-	else {
-		snprintf(addr->sun_path, sizeof(addr->sun_path), "#memcr%u", pid);
-		addr->sun_path[0] = '\0';
-	}
+	addr->sin_family = AF_INET;
+	addr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	addr->sin_port = htons(PARASITE_PORT_BASE + (pid % PARASITE_PORT_RANGE));
 }
 
 static void cleanup_pid(pid_t pid)
@@ -476,9 +474,6 @@ static void cleanup_pid(pid_t pid)
 
 	if (!parasite_socket_dir)
 		return;
-
-	snprintf(path, sizeof(path), "%s/memcr%u", parasite_socket_dir, pid);
-	unlink(path);
 
 	snprintf(path, sizeof(path), "%s/memcrRestore%u", parasite_socket_dir, pid);
 	unlink(path);
@@ -675,7 +670,7 @@ static int parasite_socket_create(pid_t pid)
 		}
 	}
 
-	cd = socket(PF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+	cd = socket(PF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 	if (cd < 0) {
 		err("socket() failed: %m\n");
 	}
@@ -694,7 +689,7 @@ static int parasite_socket_create(pid_t pid)
 static int parasite_connect(pid_t pid)
 {
 	int cd;
-	struct sockaddr_un addr;
+	struct sockaddr_in addr;
 	int ret;
 	int cnt = 0;
 
@@ -707,13 +702,13 @@ static int parasite_connect(pid_t pid)
 
 	/* parasite needs some time to start listening on a socket */
 retry:
-	ret = connect(cd, (struct sockaddr *)&addr, sizeof(struct sockaddr_un));
+	ret = connect(cd, (struct sockaddr *)&addr, sizeof(addr));
 	if (ret < 0) {
 		if (cnt++ < 100) {
-			usleep(1*1000);
+			usleep(5*1000);
 			goto retry;
 		} else {
-			err("connect() to %s failed: %m\n", addr.sun_path + 1);
+			err("connect() to 127.0.0.1:%u failed: %m\n", ntohs(addr.sin_port));
 			close(cd);
 			return -1;
 		}
@@ -3057,12 +3052,10 @@ static void usage(const char *name, int status)
 		"  -h --help		help\n" \
 		"  -p --pid		target process pid\n" \
 		"  -d --dir		dir where memory dump is stored (defaults to /tmp)\n" \
-		"  -S --parasite-socket-dir	dir where socket to communicate with parasite is created\n" \
-		"        (abstract socket will be used if no path specified)\n" \
-		"  -G --parasite-socket-gid	group ID for parasite UNIX domain socket file, valid only for if --parasite-socket-dir provided\n" \
-		"                          	note: the group ID provided need to be common for: the user running memcr daemon and the user running suspended process\n" \
-		"  -N --parasite-socket-netns	use network namespace of parasite when connecting to socket\n" \
-		"        (useful if parasite is running in a container with netns)\n" \
+		"  -S --parasite-socket-dir	dir for memcr-internal restore socket (parasite uses TCP loopback, see -N)\n" \
+		"  -G --parasite-socket-gid	deprecated: parasite now uses TCP loopback, this flag is ignored\n" \
+		"  -N --parasite-socket-netns	enter network namespace of parasite when connecting to its TCP loopback port\n" \
+		"        (required if parasite is running in a container with netns)\n" \
 		"  -l --listen		work as a service waiting for requests on a socket\n" \
 		"        -l PORT: TCP port number to listen for requests on\n" \
 		"        -l PATH: filesystem path for UNIX domain socket file (will be created)\n" \

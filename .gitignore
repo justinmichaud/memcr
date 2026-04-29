@@ -1,0 +1,6 @@
+*.o
+memcr
+memcr-client
+*.bin
+*.a
+*.so

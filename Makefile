@@ -58,6 +58,11 @@ ifdef LOG_LEVEL
 	MCFLAGS += -DLOG_LEVEL=$(LOG_LEVEL)
 endif
 
+ifeq ($(PARASITE_DEBUG), 1)
+    MCFLAGS += -DPARASITE_DEBUG
+    PCFLAGS += -DPARASITE_DEBUG
+endif
+
 ifeq ("$(origin O)", "command line")
     GCC_O = $(O)
 endif
@@ -215,6 +220,7 @@ help:
 	@echo '  CHECKSUM_MD5=1  - compile in support for memory dump MD5 checksumming'
 	@echo '  ENCRYPT=1       - compile libencrypt.so that can be preloaded for memcr'
 	@echo '  LOG_LEVEL=n     - set logging level (0=errors, 1=milestones, 2=logs, 3=verbose)'
+	@echo '  PARASITE_DEBUG=1 - parasite spins on flag at service() entry; memcr skips parasite SEIZE so gdb can attach'
 	@echo ''
 	@echo 'Test targets:'
 	@echo '  tests           - build and run memcr tests'

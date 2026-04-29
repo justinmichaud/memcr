@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <assert.h>
+#include <netinet/in.h>
 
 #ifndef GIT_VERSION
 #define GIT_VERSION "unknown"
@@ -37,10 +38,10 @@ typedef enum {
 } parasite_args_flags;
 
 struct parasite_args {
-	struct sockaddr_un addr;
+	struct sockaddr_in addr;
 	unsigned long gid;
 	unsigned char flags;
-	char padding[1];
+	char padding[7];
 };
 
 /* size must be CPU word aligned for ptrace() peek/poke */
