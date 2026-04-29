@@ -1,0 +1,51 @@
+diff --git a/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp b/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
+index e1e5687811e6..60784590f69a 100644
+--- a/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
++++ b/Source/WebKit/UIProcess/API/glib/WebKitWebContext.cpp
+@@ -437,12 +437,11 @@ static void webkitWebContextConstructed(GObject* object)
+ 
+     Ref configuration = API::ProcessPoolConfiguration::create();
+     configuration->setInjectedBundlePath(FileSystem::stringFromFileSystemRepresentation(bundleFilename.get()));
+-    configuration->setUsesWebProcessCache(true);
+-#if PLATFORM(GTK) && !USE(GTK4)
+-    configuration->setProcessSwapsOnNavigation(priv->psonEnabled);
+-#else
+-    configuration->setProcessSwapsOnNavigation(true);
+-#endif
++    // Force single-WebProcess mode for easier debugging: disables PSON, the
++    // WebProcess cache, and prewarming so only one WebKitWebProcess runs.
++    configuration->setUsesWebProcessCache(false);
++    configuration->setProcessSwapsOnNavigation(false);
++    configuration->setUsesSingleWebProcess(true);
+     if (priv->memoryPressureSettings) {
+         configuration->setMemoryPressureHandlerConfiguration(webkitMemoryPressureSettingsGetMemoryPressureHandlerConfiguration(priv->memoryPressureSettings));
+         // Once the settings have been passed to the ProcessPoolConfiguration, we don't need them anymore so we can free them.
+diff --git a/Source/WebKit/UIProcess/WebProcessPool.cpp b/Source/WebKit/UIProcess/WebProcessPool.cpp
+index c9e5f1f1a7df..266a60db5b6e 100644
+--- a/Source/WebKit/UIProcess/WebProcessPool.cpp
++++ b/Source/WebKit/UIProcess/WebProcessPool.cpp
+@@ -829,12 +829,8 @@ Ref<WebProcessProxy> WebProcessPool::createNewWebProcess(WebsiteDataStore* websi
+ 
+ RefPtr<WebProcessProxy> WebProcessPool::tryTakePrewarmedProcess(WebsiteDataStore& websiteDataStore, WebProcessProxy::LockdownMode lockdownMode, EnhancedSecurity enhancedSecurity, const API::PageConfiguration& pageConfiguration)
+ {
+-#if ENABLE(WEBASSEMBLY_DEBUGGER) && ENABLE(REMOTE_INSPECTOR)
+-    // Cannot use prewarmed processes if WebAssembly debugger is needed because they were
+-    // initialized without shouldEnableWebAssemblyDebugger set, and we cannot re-initialize.
+-    if (protect(pageConfiguration.preferences())->webAssemblyDebuggerEnabled()) [[unlikely]]
+-        return nullptr;
+-#endif
++    // Prewarmed web processes disabled.
++    return nullptr;
+ 
+     RefPtr<WebProcessProxy> prewarmedProcess;
+ 
+@@ -1093,6 +1089,9 @@ void WebProcessPool::initializeNewWebProcess(WebProcessProxy& process, WebsiteDa
+ 
+ void WebProcessPool::prewarmProcess()
+ {
++    // Prewarmed web processes disabled.
++    return;
++
+     if (m_prewarmedProcesses.computeSize() >= prewarmedProcessCountLimit())
+         return;
+ 
